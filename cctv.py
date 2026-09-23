@@ -34,6 +34,13 @@ def parse_timeout(value: str) -> int:
     return timeout
 
 
+def parse_channel(value: str) -> int:
+    channel = int(value)
+    if channel <= 0:
+        raise argparse.ArgumentTypeError("channel must be a positive integer")
+    return channel
+
+
 @dataclass(frozen=True)
 class SwannConfig:
     host: str
@@ -98,7 +105,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     snapshot_url = sub.add_parser("snapshot-url", help="Print snapshot URL for a channel")
-    snapshot_url.add_argument("--channel", type=int, default=1, help="Channel number")
+    snapshot_url.add_argument("--channel", type=parse_channel, default=1, help="Channel number")
     snapshot_url.add_argument("--path", default=DEFAULT_SNAPSHOT_PATH, help="Snapshot endpoint path")
 
     status = sub.add_parser("status", help="Fetch camera/NVR status endpoint")
@@ -139,8 +146,7 @@ def main() -> int:
         if args.command == "request":
             content, content_type = client.request_response(path=args.path, method=args.method.upper(), accept=args.accept)
             content_type = (content_type or "").lower()
-            accepts_json = "json" in args.accept.lower()
-            if "json" in content_type or accepts_json:
+            if "json" in content_type:
                 try:
                     print(json.dumps(json.loads(content.decode("utf-8")), indent=2))
                     return 0

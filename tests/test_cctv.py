@@ -5,7 +5,15 @@ from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
-from cctv import SwannClient, SwannConfig, build_basic_auth_header, main, parse_port, parse_timeout
+from cctv import (
+    SwannClient,
+    SwannConfig,
+    build_basic_auth_header,
+    main,
+    parse_channel,
+    parse_port,
+    parse_timeout,
+)
 
 
 class SwannClientTests(unittest.TestCase):
@@ -76,6 +84,11 @@ class SwannClientTests(unittest.TestCase):
             parse_timeout("0")
         with self.assertRaisesRegex(Exception, "positive integer"):
             parse_timeout("-5")
+
+    def test_parse_channel_validates_positive(self):
+        self.assertEqual(parse_channel("1"), 1)
+        with self.assertRaisesRegex(Exception, "positive integer"):
+            parse_channel("0")
 
     @patch("cctv.request.urlopen")
     def test_main_http_error_to_stderr(self, mock_urlopen):
