@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import threading
 from dataclasses import dataclass
 from typing import Optional
 from urllib import error
@@ -57,6 +58,15 @@ def format_request_output(content: bytes, content_type: Optional[str]) -> str:
         binary_content = rendered if isinstance(rendered, bytes) else content
         return binary_content.hex()
     return str(rendered)
+
+
+def parse_channel_from_input(value: str) -> int:
+    return parse_channel(value.strip())
+
+
+def perform_formatted_request(client: SwannClient, path: str, method: str, accept: str) -> str:
+    content, content_type = client.request_response(path=path, method=method, accept=accept)
+    return format_request_output(content, content_type)
 
 
 def run_gui() -> int:
@@ -197,10 +207,28 @@ def run_gui() -> int:
             )
             return SwannClient(config)
 
+        def _run_network_task(self, task) -> None:
+            def worker() -> None:
+                try:
+                    result = task()
+                    self.root.after(0, lambda: self._show_output(result))
+                except error.HTTPError as exc:
+                    message = f"HTTP error {exc.code}: {exc.reason}"
+                    self.root.after(0, lambda msg=message: messagebox.showerror("HTTP error", msg))
+                except error.URLError as exc:
+                    message = f"Connection error: {exc.reason}"
+                    self.root.after(0, lambda msg=message: messagebox.showerror("Connection error", msg))
+                except Exception as exc:  # pragma: no cover
+                    detail = str(exc).strip() or exc.__class__.__name__
+                    message = f"Unexpected error: {detail}"
+                    self.root.after(0, lambda msg=message: messagebox.showerror("Unexpected error", msg))
+
+            threading.Thread(target=worker, daemon=True).start()
+
         def generate_snapshot_url(self) -> None:
             try:
                 client = self._build_client()
-                channel = parse_channel(self.channel_var.get().strip())
+                channel = parse_channel_from_input(self.channel_var.get())
                 snapshot_url = client.snapshot_url(channel=channel, path=self.snapshot_path_var.get())
                 self._show_output(snapshot_url)
             except (ValueError, argparse.ArgumentTypeError) as exc:
@@ -209,30 +237,24 @@ def run_gui() -> int:
         def fetch_status(self) -> None:
             try:
                 client = self._build_client()
-                self._show_output(client.get_status(path=self.status_path_var.get()))
+                status_path = self.status_path_var.get()
+                self._run_network_task(lambda: client.get_status(path=status_path))
             except (ValueError, argparse.ArgumentTypeError) as exc:
                 messagebox.showerror("Invalid input", str(exc))
-            except error.HTTPError as exc:
-                messagebox.showerror("HTTP error", f"HTTP error {exc.code}: {exc.reason}")
-            except error.URLError as exc:
-                messagebox.showerror("Connection error", f"Connection error: {exc.reason}")
 
         def send_request(self) -> None:
             try:
                 client = self._build_client()
                 method = self.request_method_var.get().upper()
-                content, content_type = client.request_response(
-                    path=self.request_path_var.get(),
-                    method=method,
-                    accept=self.request_accept_var.get(),
-                )
-                self._show_output(format_request_output(content, content_type))
+                request_path = self.request_path_var.get()
+                request_accept = self.request_accept_var.get()
+
+                def request_task() -> str:
+                    return perform_formatted_request(client, request_path, method, request_accept)
+
+                self._run_network_task(request_task)
             except (ValueError, argparse.ArgumentTypeError) as exc:
                 messagebox.showerror("Invalid input", str(exc))
-            except error.HTTPError as exc:
-                messagebox.showerror("HTTP error", f"HTTP error {exc.code}: {exc.reason}")
-            except error.URLError as exc:
-                messagebox.showerror("Connection error", f"Connection error: {exc.reason}")
 
     root = tk.Tk()
     CCTVGUI(root)
