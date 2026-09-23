@@ -1,0 +1,2 @@
+# CCTV uses only Python standard-library modules.
+# Tkinter is required for the GUI and must be installed through the system package manager.
