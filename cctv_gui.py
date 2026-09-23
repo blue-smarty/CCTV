@@ -84,6 +84,7 @@ def run_gui() -> int:
             self.request_path_var = tk.StringVar(value=DEFAULT_STATUS_PATH)
             self.request_method_var = tk.StringVar(value="GET")
             self.request_accept_var = tk.StringVar(value="application/json")
+            self._http_confirmed_fingerprint: Optional[tuple[str, str, str, str]] = None
 
             self._build_layout()
 
@@ -167,12 +168,22 @@ def run_gui() -> int:
 
         def _build_client(self) -> SwannClient:
             if not self.https_var.get():
-                proceed = messagebox.askyesno(
-                    title="Disable HTTPS?",
-                    message="HTTPS is recommended for secure camera access. Continue with HTTP?",
+                fingerprint = (
+                    self.host_var.get().strip(),
+                    self.port_var.get().strip(),
+                    self.timeout_var.get().strip(),
+                    self.username_var.get().strip(),
                 )
-                if not proceed:
-                    raise ValueError("HTTPS is required unless explicitly confirmed.")
+                if self._http_confirmed_fingerprint != fingerprint:
+                    proceed = messagebox.askyesno(
+                        title="Disable HTTPS?",
+                        message="HTTPS is recommended for secure camera access. Continue with HTTP?",
+                    )
+                    if not proceed:
+                        raise ValueError("HTTPS is required unless explicitly confirmed.")
+                    self._http_confirmed_fingerprint = fingerprint
+            else:
+                self._http_confirmed_fingerprint = None
             config = build_config_from_input(
                 GUIConnectionInput(
                     self.host_var.get(),
@@ -201,9 +212,9 @@ def run_gui() -> int:
             except (ValueError, argparse.ArgumentTypeError) as exc:
                 messagebox.showerror("Invalid input", str(exc))
             except error.HTTPError as exc:
-                self._show_output(f"HTTP error {exc.code}: {exc.reason}")
+                messagebox.showerror("HTTP error", f"HTTP error {exc.code}: {exc.reason}")
             except error.URLError as exc:
-                self._show_output(f"Connection error: {exc.reason}")
+                messagebox.showerror("Connection error", f"Connection error: {exc.reason}")
 
         def send_request(self) -> None:
             try:
@@ -218,9 +229,9 @@ def run_gui() -> int:
             except (ValueError, argparse.ArgumentTypeError) as exc:
                 messagebox.showerror("Invalid input", str(exc))
             except error.HTTPError as exc:
-                self._show_output(f"HTTP error {exc.code}: {exc.reason}")
+                messagebox.showerror("HTTP error", f"HTTP error {exc.code}: {exc.reason}")
             except error.URLError as exc:
-                self._show_output(f"Connection error: {exc.reason}")
+                messagebox.showerror("Connection error", f"Connection error: {exc.reason}")
 
     root = tk.Tk()
     CCTVGUI(root)
