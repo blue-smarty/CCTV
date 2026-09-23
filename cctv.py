@@ -16,6 +16,17 @@ DEFAULT_SNAPSHOT_PATH = "/cgi-bin/snapshot.cgi"
 DEFAULT_STATUS_PATH = "/ISAPI/System/status"
 
 
+def normalize_path(path: str) -> str:
+    return path if path.startswith("/") else f"/{path}"
+
+
+def parse_port(value: str) -> int:
+    port = int(value)
+    if port < 1 or port > 65535:
+        raise argparse.ArgumentTypeError("port must be between 1 and 65535")
+    return port
+
+
 @dataclass(frozen=True)
 class SwannConfig:
     host: str
@@ -46,11 +57,11 @@ class SwannClient:
 
     def snapshot_url(self, channel: int = 1, path: str = DEFAULT_SNAPSHOT_PATH) -> str:
         query = parse.urlencode({"channel": channel})
-        return f"{self.config.base_url}{path}?{query}"
+        return f"{self.config.base_url}{normalize_path(path)}?{query}"
 
     def request(self, path: str, method: str = "GET", accept: str = "application/json") -> bytes:
         req = request.Request(
-            url=f"{self.config.base_url}{path}",
+            url=f"{self.config.base_url}{normalize_path(path)}",
             method=method,
             headers={"Accept": accept},
         )
@@ -69,7 +80,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", required=True, help="Camera/NVR hostname or IP")
     parser.add_argument("--username", default=None, help="Username for basic auth")
     parser.add_argument("--password", default=None, help="Password for basic auth")
-    parser.add_argument("--port", type=int, default=None, help="Camera/NVR port")
+    parser.add_argument("--port", type=parse_port, default=None, help="Camera/NVR port")
     parser.add_argument("--https", action="store_true", help="Use HTTPS instead of HTTP")
     parser.add_argument("--timeout", type=int, default=10, help="HTTP timeout in seconds")
 

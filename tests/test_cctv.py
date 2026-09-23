@@ -5,7 +5,7 @@ from contextlib import redirect_stderr
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
-from cctv import SwannClient, SwannConfig, build_basic_auth_header, main
+from cctv import SwannClient, SwannConfig, build_basic_auth_header, main, parse_port
 
 
 class SwannClientTests(unittest.TestCase):
@@ -25,6 +25,10 @@ class SwannClientTests(unittest.TestCase):
             client.snapshot_url(channel=2),
             "http://10.0.0.10/cgi-bin/snapshot.cgi?channel=2",
         )
+        self.assertEqual(
+            client.snapshot_url(channel=2, path="cgi-bin/snapshot.cgi"),
+            "http://10.0.0.10/cgi-bin/snapshot.cgi?channel=2",
+        )
 
     @patch("cctv.request.urlopen")
     def test_request_adds_auth_header(self, mock_urlopen):
@@ -39,6 +43,22 @@ class SwannClientTests(unittest.TestCase):
         self.assertEqual(req.full_url, "http://cam.local/api/status")
         self.assertEqual(req.get_method(), "GET")
         self.assertTrue(req.headers["Authorization"].startswith("Basic "))
+
+    @patch("cctv.request.urlopen")
+    def test_request_normalizes_path_without_leading_slash(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = b"ok"
+        client = SwannClient(SwannConfig("cam.local"))
+        client.request(path="api/status")
+        req = mock_urlopen.call_args.args[0]
+        self.assertEqual(req.full_url, "http://cam.local/api/status")
+
+    def test_parse_port_validates_range(self):
+        self.assertEqual(parse_port("80"), 80)
+        with self.assertRaisesRegex(Exception, "between 1 and 65535"):
+            parse_port("0")
+        with self.assertRaisesRegex(Exception, "between 1 and 65535"):
+            parse_port("65536")
 
     @patch("cctv.request.urlopen")
     def test_main_http_error_to_stderr(self, mock_urlopen):
