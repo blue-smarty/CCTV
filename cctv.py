@@ -66,7 +66,7 @@ class SwannClient:
         query = parse.urlencode({"channel": channel})
         return f"{self.config.base_url}{normalize_path(path)}?{query}"
 
-    def request(self, path: str, method: str = "GET", accept: str = "application/json") -> bytes:
+    def request_response(self, path: str, method: str = "GET", accept: str = "application/json") -> tuple[bytes, Optional[str]]:
         req = request.Request(
             url=f"{self.config.base_url}{normalize_path(path)}",
             method=method,
@@ -76,7 +76,11 @@ class SwannClient:
         if auth_header:
             req.add_header("Authorization", auth_header)
         with request.urlopen(req, timeout=self.config.timeout) as resp:  # nosec B310
-            return resp.read()
+            return resp.read(), resp.headers.get("Content-Type")
+
+    def request(self, path: str, method: str = "GET", accept: str = "application/json") -> bytes:
+        content, _ = self.request_response(path=path, method=method, accept=accept)
+        return content
 
     def get_status(self, path: str = DEFAULT_STATUS_PATH) -> str:
         return self.request(path=path, accept="application/json, application/xml, text/plain").decode("utf-8", "replace")
@@ -109,7 +113,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    args = _build_parser().parse_args()
+    parser = _build_parser()
+    args = parser.parse_args()
+    if bool(args.username) != bool(args.password):
+        print("Both --username and --password must be provided together", file=sys.stderr)
+        return 4
     client = SwannClient(
         SwannConfig(
             args.host,
@@ -129,10 +137,18 @@ def main() -> int:
             print(client.get_status(path=args.path))
             return 0
         if args.command == "request":
-            content = client.request(path=args.path, method=args.method.upper(), accept=args.accept)
-            try:
-                print(json.dumps(json.loads(content.decode("utf-8")), indent=2))
-            except (UnicodeDecodeError, json.JSONDecodeError):
+            content, content_type = client.request_response(path=args.path, method=args.method.upper(), accept=args.accept)
+            content_type = (content_type or "").lower()
+            accepts_json = "json" in args.accept.lower()
+            if "json" in content_type or accepts_json:
+                try:
+                    print(json.dumps(json.loads(content.decode("utf-8")), indent=2))
+                    return 0
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    pass
+            if content_type.startswith("text/") or "xml" in content_type:
+                print(content.decode("utf-8", "replace"))
+            else:
                 sys.stdout.buffer.write(content)
                 if not content.endswith(b"\n"):
                     sys.stdout.buffer.write(b"\n")

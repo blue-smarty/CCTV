@@ -1,7 +1,7 @@
 import base64
 import io
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
@@ -74,6 +74,8 @@ class SwannClientTests(unittest.TestCase):
         self.assertEqual(parse_timeout("10"), 10)
         with self.assertRaisesRegex(Exception, "positive integer"):
             parse_timeout("0")
+        with self.assertRaisesRegex(Exception, "positive integer"):
+            parse_timeout("-5")
 
     @patch("cctv.request.urlopen")
     def test_main_http_error_to_stderr(self, mock_urlopen):
@@ -119,6 +121,7 @@ class SwannClientTests(unittest.TestCase):
     def test_main_request_writes_binary_to_stdout_buffer(self, mock_urlopen):
         mock_response = mock_urlopen.return_value.__enter__.return_value
         mock_response.read.return_value = b"\xff\xd8"
+        mock_response.headers = {"Content-Type": "image/jpeg"}
         fake_stdout = self._FakeStdout()
         argv = [
             "cctv.py",
@@ -132,6 +135,33 @@ class SwannClientTests(unittest.TestCase):
             exit_code = main()
         self.assertEqual(exit_code, 0)
         self.assertEqual(fake_stdout.buffer.getvalue(), b"\xff\xd8\n")
+
+    @patch("cctv.request.urlopen")
+    def test_main_request_writes_text_for_text_content_type(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = b"camera online"
+        mock_response.headers = {"Content-Type": "text/plain; charset=utf-8"}
+        out = io.StringIO()
+        argv = [
+            "cctv.py",
+            "--host",
+            "cam.local",
+            "request",
+            "--path",
+            "/status.txt",
+        ]
+        with patch("sys.argv", argv), redirect_stdout(out):
+            exit_code = main()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(out.getvalue(), "camera online\n")
+
+    def test_main_rejects_partial_credentials(self):
+        stderr = io.StringIO()
+        argv = ["cctv.py", "--host", "cam.local", "--username", "admin", "snapshot-url"]
+        with patch("sys.argv", argv), redirect_stderr(stderr):
+            exit_code = main()
+        self.assertEqual(exit_code, 4)
+        self.assertIn("Both --username and --password must be provided together", stderr.getvalue())
 
 
 if __name__ == "__main__":
