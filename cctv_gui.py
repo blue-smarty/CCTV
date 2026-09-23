@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from typing import Optional
 from urllib import error
@@ -12,6 +13,7 @@ from cctv import (
     DEFAULT_STATUS_PATH,
     SwannClient,
     SwannConfig,
+    render_content,
     parse_channel,
     parse_port,
     parse_timeout,
@@ -47,6 +49,14 @@ def build_config_from_input(params: GUIConnectionInput) -> SwannConfig:
         params.https,
         timeout,
     )
+
+
+def format_request_output(content: bytes, content_type: Optional[str]) -> str:
+    is_binary, rendered = render_content(content, content_type)
+    if is_binary:
+        binary_content = rendered if isinstance(rendered, bytes) else content
+        return binary_content.hex()
+    return str(rendered)
 
 
 def run_gui() -> int:
@@ -181,16 +191,14 @@ def run_gui() -> int:
                 channel = parse_channel(self.channel_var.get().strip())
                 snapshot_url = client.snapshot_url(channel=channel, path=self.snapshot_path_var.get())
                 self._show_output(snapshot_url)
-            except ValueError as exc:
+            except (ValueError, argparse.ArgumentTypeError) as exc:
                 messagebox.showerror("Invalid input", str(exc))
-            except Exception as exc:  # pragma: no cover
-                messagebox.showerror("Unexpected error", str(exc))
 
         def fetch_status(self) -> None:
             try:
                 client = self._build_client()
                 self._show_output(client.get_status(path=self.status_path_var.get()))
-            except ValueError as exc:
+            except (ValueError, argparse.ArgumentTypeError) as exc:
                 messagebox.showerror("Invalid input", str(exc))
             except error.HTTPError as exc:
                 self._show_output(f"HTTP error {exc.code}: {exc.reason}")
@@ -206,14 +214,8 @@ def run_gui() -> int:
                     method=method,
                     accept=self.request_accept_var.get(),
                 )
-                from cctv import render_content
-
-                is_binary, rendered = render_content(content, content_type)
-                if is_binary:
-                    self._show_output(content.hex())
-                else:
-                    self._show_output(str(rendered))
-            except ValueError as exc:
+                self._show_output(format_request_output(content, content_type))
+            except (ValueError, argparse.ArgumentTypeError) as exc:
                 messagebox.showerror("Invalid input", str(exc))
             except error.HTTPError as exc:
                 self._show_output(f"HTTP error {exc.code}: {exc.reason}")

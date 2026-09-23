@@ -1,6 +1,6 @@
 import unittest
 
-from cctv_gui import GUIConnectionInput, build_config_from_input
+from cctv_gui import GUIConnectionInput, build_config_from_input, format_request_output
 
 
 class GUIConfigTests(unittest.TestCase):
@@ -33,6 +33,18 @@ class GUIConfigTests(unittest.TestCase):
     def test_build_config_from_input_rejects_empty_host(self):
         with self.assertRaisesRegex(ValueError, "Host is required"):
             build_config_from_input(GUIConnectionInput(host="   "))
+
+    def test_format_request_output_for_text(self):
+        rendered = format_request_output(b"camera online", "text/plain; charset=utf-8")
+        self.assertEqual(rendered, "camera online")
+
+    def test_format_request_output_for_json(self):
+        rendered = format_request_output(b'{"ok":true}', "application/json")
+        self.assertEqual(rendered, '{\n  "ok": true\n}')
+
+    def test_format_request_output_for_binary(self):
+        rendered = format_request_output(b"\xff\xd8", "image/jpeg")
+        self.assertEqual(rendered, "ffd8")
 
 
 if __name__ == "__main__":
