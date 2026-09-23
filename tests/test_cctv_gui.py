@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from cctv_gui import GUIConnectionInput, build_config_from_input, format_request_output
 
@@ -45,6 +46,11 @@ class GUIConfigTests(unittest.TestCase):
     def test_format_request_output_for_binary(self):
         rendered = format_request_output(b"\xff\xd8", "image/jpeg")
         self.assertEqual(rendered, "ffd8")
+
+    @patch("cctv_gui.render_content", return_value=(True, b"\x01\x02"))
+    def test_format_request_output_prefers_rendered_binary_bytes(self, _mock_render_content):
+        rendered = format_request_output(b"\xff\xd8", "image/jpeg")
+        self.assertEqual(rendered, "0102")
 
 
 if __name__ == "__main__":

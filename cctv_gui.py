@@ -84,7 +84,7 @@ def run_gui() -> int:
             self.request_path_var = tk.StringVar(value=DEFAULT_STATUS_PATH)
             self.request_method_var = tk.StringVar(value="GET")
             self.request_accept_var = tk.StringVar(value="application/json")
-            self._http_confirmed_fingerprint: Optional[tuple[str, str, str, str]] = None
+            self._http_confirmed_fingerprint: Optional[tuple[str, str, str, str, str]] = None
 
             self._build_layout()
 
@@ -140,7 +140,7 @@ def run_gui() -> int:
                 actions,
                 textvariable=self.request_method_var,
                 width=8,
-                values=("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"),
+                values=("GET", "HEAD"),
                 state="readonly",
             )
             method_combo.grid(row=2, column=3, sticky=tk.W, padx=6, pady=4)
@@ -173,6 +173,7 @@ def run_gui() -> int:
                     self.port_var.get().strip(),
                     self.timeout_var.get().strip(),
                     self.username_var.get().strip(),
+                    self.password_var.get(),
                 )
                 if self._http_confirmed_fingerprint != fingerprint:
                     proceed = messagebox.askyesno(
