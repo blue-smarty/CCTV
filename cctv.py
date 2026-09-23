@@ -100,6 +100,7 @@ class SwannClient:
     def snapshot_url(self, channel: int = 1, path: str = DEFAULT_SNAPSHOT_PATH) -> str:
         parsed_path = parse.urlsplit(normalize_path(path))
         query_pairs = parse.parse_qsl(parsed_path.query, keep_blank_values=True)
+        query_pairs = [(k, v) for (k, v) in query_pairs if k.lower() != "channel"]
         query_pairs.append(("channel", str(channel)))
         query = parse.urlencode(query_pairs)
         query_suffix = f"?{query}" if query else ""
@@ -194,7 +195,11 @@ def main() -> int:
             content, content_type = client.request_response(path=args.path, method=args.method.upper(), accept=args.accept)
             is_binary, rendered = render_content(content, content_type)
             if is_binary:
-                sys.stdout.buffer.write(content)
+                output_buffer = getattr(sys.stdout, "buffer", None)
+                if output_buffer is None:
+                    print("Binary output requires a binary-capable stdout stream", file=sys.stderr)
+                    return 5
+                output_buffer.write(content)
             else:
                 print(rendered)
             return 0

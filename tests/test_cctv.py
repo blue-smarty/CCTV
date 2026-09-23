@@ -57,6 +57,10 @@ class SwannClientTests(unittest.TestCase):
             "http://10.0.0.10/cgi-bin/snapshot.cgi?size=large&channel=2",
         )
         self.assertEqual(
+            client.snapshot_url(channel=2, path="/cgi-bin/snapshot.cgi?channel=5"),
+            "http://10.0.0.10/cgi-bin/snapshot.cgi?channel=2",
+        )
+        self.assertEqual(
             client.snapshot_url(channel=2, path="https://alt.local/cgi-bin/snapshot.cgi"),
             "https://alt.local/cgi-bin/snapshot.cgi?channel=2",
         )
@@ -182,6 +186,26 @@ class SwannClientTests(unittest.TestCase):
             exit_code = main()
         self.assertEqual(exit_code, 0)
         self.assertEqual(fake_stdout.buffer.getvalue(), b"\xff\xd8")
+
+    @patch("cctv.request.urlopen")
+    def test_main_binary_request_requires_binary_stdout(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = b"\xff\xd8"
+        mock_response.headers = {"Content-Type": "image/jpeg"}
+        out = io.StringIO()
+        err = io.StringIO()
+        argv = [
+            "cctv.py",
+            "--host",
+            "cam.local",
+            "request",
+            "--path",
+            "/snapshot.bin",
+        ]
+        with patch("sys.argv", argv), redirect_stdout(out), redirect_stderr(err):
+            exit_code = main()
+        self.assertEqual(exit_code, 5)
+        self.assertIn("Binary output requires a binary-capable stdout stream", err.getvalue())
 
     @patch("cctv.request.urlopen")
     def test_main_request_writes_text_for_text_content_type(self, mock_urlopen):
