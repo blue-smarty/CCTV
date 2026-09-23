@@ -78,8 +78,12 @@ class SwannClient:
         self.config = config
 
     def snapshot_url(self, channel: int = 1, path: str = DEFAULT_SNAPSHOT_PATH) -> str:
-        query = parse.urlencode({"channel": channel})
-        return f"{self.config.base_url}{normalize_path(path)}?{query}"
+        parsed_path = parse.urlsplit(normalize_path(path))
+        query_pairs = parse.parse_qsl(parsed_path.query, keep_blank_values=True)
+        query_pairs.append(("channel", str(channel)))
+        query = parse.urlencode(query_pairs)
+        fragment = f"#{parsed_path.fragment}" if parsed_path.fragment else ""
+        return f"{self.config.base_url}{parsed_path.path}?{query}{fragment}"
 
     def request_response(self, path: str, method: str = "GET", accept: str = "application/json") -> tuple[bytes, Optional[str]]:
         req = request.Request(
@@ -98,7 +102,11 @@ class SwannClient:
         return content
 
     def get_status(self, path: str = DEFAULT_STATUS_PATH) -> str:
-        return self.request(path=path, accept="application/json, application/xml, text/plain").decode("utf-8", "replace")
+        content, content_type = self.request_response(
+            path=path,
+            accept="application/json, application/xml, text/plain",
+        )
+        return content.decode(detect_charset((content_type or "").lower()), "replace")
 
 
 def _build_parser() -> argparse.ArgumentParser:

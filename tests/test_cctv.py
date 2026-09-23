@@ -48,6 +48,10 @@ class SwannClientTests(unittest.TestCase):
             client.snapshot_url(channel=2, path="cgi-bin/snapshot.cgi"),
             "http://10.0.0.10/cgi-bin/snapshot.cgi?channel=2",
         )
+        self.assertEqual(
+            client.snapshot_url(channel=2, path="/cgi-bin/snapshot.cgi?size=large"),
+            "http://10.0.0.10/cgi-bin/snapshot.cgi?size=large&channel=2",
+        )
 
     @patch("cctv.request.urlopen")
     def test_request_adds_auth_header(self, mock_urlopen):
@@ -71,6 +75,14 @@ class SwannClientTests(unittest.TestCase):
         client.request(path="api/status")
         req = mock_urlopen.call_args.args[0]
         self.assertEqual(req.full_url, "http://cam.local/api/status")
+
+    @patch("cctv.request.urlopen")
+    def test_get_status_respects_charset(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = "caf\xe9".encode("iso-8859-1")
+        mock_response.headers = {"Content-Type": "text/plain; charset=iso-8859-1"}
+        client = SwannClient(SwannConfig("cam.local"))
+        self.assertEqual(client.get_status(), "café")
 
     def test_parse_port_validates_range(self):
         self.assertEqual(parse_port("80"), 80)
