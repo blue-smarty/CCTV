@@ -1,8 +1,11 @@
 import base64
+import io
 import unittest
+from contextlib import redirect_stderr
 from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 
-from cctv import SwannClient, SwannConfig, build_basic_auth_header
+from cctv import SwannClient, SwannConfig, build_basic_auth_header, main
 
 
 class SwannClientTests(unittest.TestCase):
@@ -36,6 +39,46 @@ class SwannClientTests(unittest.TestCase):
         self.assertEqual(req.full_url, "http://cam.local/api/status")
         self.assertEqual(req.get_method(), "GET")
         self.assertTrue(req.headers["Authorization"].startswith("Basic "))
+
+    @patch("cctv.request.urlopen")
+    def test_main_http_error_to_stderr(self, mock_urlopen):
+        mock_urlopen.side_effect = HTTPError(
+            url="http://cam.local/api/status",
+            code=401,
+            msg="Unauthorized",
+            hdrs=None,
+            fp=None,
+        )
+        stderr = io.StringIO()
+        argv = [
+            "cctv.py",
+            "--host",
+            "cam.local",
+            "request",
+            "--path",
+            "/api/status",
+        ]
+        with patch("sys.argv", argv), redirect_stderr(stderr):
+            exit_code = main()
+        self.assertEqual(exit_code, 2)
+        self.assertIn("HTTP error 401: Unauthorized", stderr.getvalue())
+
+    @patch("cctv.request.urlopen")
+    def test_main_url_error_to_stderr(self, mock_urlopen):
+        mock_urlopen.side_effect = URLError("timed out")
+        stderr = io.StringIO()
+        argv = [
+            "cctv.py",
+            "--host",
+            "cam.local",
+            "request",
+            "--path",
+            "/api/status",
+        ]
+        with patch("sys.argv", argv), redirect_stderr(stderr):
+            exit_code = main()
+        self.assertEqual(exit_code, 3)
+        self.assertIn("Connection error: timed out", stderr.getvalue())
 
 
 if __name__ == "__main__":

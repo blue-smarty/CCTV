@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import sys
 from dataclasses import dataclass
 from typing import Optional
 from urllib import error, parse, request
@@ -117,10 +118,10 @@ def main() -> int:
                 print(content.decode("utf-8", "replace"))
             return 0
     except error.HTTPError as exc:
-        print(f"HTTP error {exc.code}: {exc.reason}")
+        print(f"HTTP error {exc.code}: {exc.reason}", file=sys.stderr)
         return 2
     except error.URLError as exc:
-        print(f"Connection error: {exc.reason}")
+        print(f"Connection error: {exc.reason}", file=sys.stderr)
         return 3
 
     return 1
