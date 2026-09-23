@@ -9,6 +9,7 @@ from cctv import (
     SwannClient,
     SwannConfig,
     build_basic_auth_header,
+    detect_charset,
     main,
     parse_channel,
     parse_port,
@@ -90,6 +91,10 @@ class SwannClientTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "positive integer"):
             parse_channel("0")
 
+    def test_detect_charset(self):
+        self.assertEqual(detect_charset("text/plain; charset=iso-8859-1"), "iso-8859-1")
+        self.assertEqual(detect_charset("text/plain"), "utf-8")
+
     @patch("cctv.request.urlopen")
     def test_main_http_error_to_stderr(self, mock_urlopen):
         mock_urlopen.side_effect = HTTPError(
@@ -168,6 +173,25 @@ class SwannClientTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(out.getvalue(), "camera online\n")
 
+    @patch("cctv.request.urlopen")
+    def test_main_request_respects_text_charset(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = "caf\xe9".encode("iso-8859-1")
+        mock_response.headers = {"Content-Type": "text/plain; charset=iso-8859-1"}
+        out = io.StringIO()
+        argv = [
+            "cctv.py",
+            "--host",
+            "cam.local",
+            "request",
+            "--path",
+            "/status.txt",
+        ]
+        with patch("sys.argv", argv), redirect_stdout(out):
+            exit_code = main()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(out.getvalue(), "café\n")
+
     def test_main_rejects_partial_credentials(self):
         stderr = io.StringIO()
         argv = ["cctv.py", "--host", "cam.local", "--username", "admin", "snapshot-url"]
@@ -175,6 +199,22 @@ class SwannClientTests(unittest.TestCase):
             exit_code = main()
         self.assertEqual(exit_code, 4)
         self.assertIn("Both --username and --password must be provided together", stderr.getvalue())
+
+    def test_main_allows_empty_credential_values_when_both_present(self):
+        out = io.StringIO()
+        argv = [
+            "cctv.py",
+            "--host",
+            "cam.local",
+            "--username",
+            "",
+            "--password",
+            "",
+            "snapshot-url",
+        ]
+        with patch("sys.argv", argv), redirect_stdout(out):
+            exit_code = main()
+        self.assertEqual(exit_code, 0)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import re
 import sys
 from dataclasses import dataclass
 from typing import Optional
@@ -39,6 +40,13 @@ def parse_channel(value: str) -> int:
     if channel <= 0:
         raise argparse.ArgumentTypeError("channel must be a positive integer")
     return channel
+
+
+def detect_charset(content_type: str, default: str = "utf-8") -> str:
+    match = re.search(r"charset=([\w.-]+)", content_type, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return default
 
 
 @dataclass(frozen=True)
@@ -122,7 +130,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
-    if bool(args.username) != bool(args.password):
+    if (args.username is None) != (args.password is None):
         print("Both --username and --password must be provided together", file=sys.stderr)
         return 4
     client = SwannClient(
@@ -153,7 +161,8 @@ def main() -> int:
                 except (UnicodeDecodeError, json.JSONDecodeError):
                     pass
             if content_type.startswith("text/") or "xml" in content_type:
-                print(content.decode("utf-8", "replace"))
+                encoding = detect_charset(content_type)
+                print(content.decode(encoding, "replace"))
             else:
                 sys.stdout.buffer.write(content)
                 if not content.endswith(b"\n"):
