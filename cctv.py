@@ -49,6 +49,23 @@ def detect_charset(content_type: str, default: str = "utf-8") -> str:
     return default
 
 
+def decode_text_content(content: bytes, content_type: str) -> str:
+    return content.decode(detect_charset(content_type.lower()), "replace")
+
+
+def render_content(content: bytes, content_type: Optional[str]) -> tuple[bool, str | bytes]:
+    normalized = (content_type or "").lower()
+    if "json" in normalized:
+        try:
+            decoded = content.decode(detect_charset(normalized))
+            return False, json.dumps(json.loads(decoded), indent=2)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            pass
+    if normalized.startswith("text/") or "xml" in normalized:
+        return False, decode_text_content(content, normalized)
+    return True, content
+
+
 @dataclass(frozen=True)
 class SwannConfig:
     host: str
@@ -107,7 +124,10 @@ class SwannClient:
             path=path,
             accept="application/json, application/xml, text/plain",
         )
-        return content.decode(detect_charset((content_type or "").lower()), "replace")
+        is_binary, rendered = render_content(content, content_type)
+        if is_binary:
+            return content.decode("utf-8", "replace")
+        return rendered
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -162,21 +182,13 @@ def main() -> int:
             return 0
         if args.command == "request":
             content, content_type = client.request_response(path=args.path, method=args.method.upper(), accept=args.accept)
-            content_type = (content_type or "").lower()
-            if "json" in content_type:
-                try:
-                    encoding = detect_charset(content_type)
-                    print(json.dumps(json.loads(content.decode(encoding)), indent=2))
-                    return 0
-                except (UnicodeDecodeError, json.JSONDecodeError):
-                    pass
-            if content_type.startswith("text/") or "xml" in content_type:
-                encoding = detect_charset(content_type)
-                print(content.decode(encoding, "replace"))
-            else:
+            is_binary, rendered = render_content(content, content_type)
+            if is_binary:
                 sys.stdout.buffer.write(content)
                 if not content.endswith(b"\n"):
                     sys.stdout.buffer.write(b"\n")
+            else:
+                print(rendered)
             return 0
     except error.HTTPError as exc:
         print(f"HTTP error {exc.code}: {exc.reason}", file=sys.stderr)
