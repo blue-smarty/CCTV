@@ -37,6 +37,8 @@ class SwannClientTests(unittest.TestCase):
         expected = base64.b64encode(b"admin:secret").decode("ascii")
         self.assertEqual(header, f"Basic {expected}")
         self.assertIsNone(build_basic_auth_header(None, "secret"))
+        empty_expected = base64.b64encode(b":").decode("ascii")
+        self.assertEqual(build_basic_auth_header("", ""), f"Basic {empty_expected}")
 
     def test_snapshot_url(self):
         client = SwannClient(SwannConfig(host="10.0.0.10"))

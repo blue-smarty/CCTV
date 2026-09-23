@@ -67,7 +67,7 @@ class SwannConfig:
 
 
 def build_basic_auth_header(username: Optional[str], password: Optional[str]) -> Optional[str]:
-    if not username:
+    if username is None:
         return None
     token = base64.b64encode(f"{username}:{password or ''}".encode("utf-8")).decode("ascii")
     return f"Basic {token}"
@@ -82,8 +82,9 @@ class SwannClient:
         query_pairs = parse.parse_qsl(parsed_path.query, keep_blank_values=True)
         query_pairs.append(("channel", str(channel)))
         query = parse.urlencode(query_pairs)
+        query_suffix = f"?{query}" if query else ""
         fragment = f"#{parsed_path.fragment}" if parsed_path.fragment else ""
-        return f"{self.config.base_url}{parsed_path.path}?{query}{fragment}"
+        return f"{self.config.base_url}{parsed_path.path}{query_suffix}{fragment}"
 
     def request_response(self, path: str, method: str = "GET", accept: str = "application/json") -> tuple[bytes, Optional[str]]:
         req = request.Request(
