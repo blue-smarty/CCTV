@@ -204,6 +204,25 @@ class SwannClientTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(out.getvalue(), "café\n")
 
+    @patch("cctv.request.urlopen")
+    def test_main_request_respects_json_charset(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = b'{"name":"caf\xe9"}'
+        mock_response.headers = {"Content-Type": "application/json; charset=iso-8859-1"}
+        out = io.StringIO()
+        argv = [
+            "cctv.py",
+            "--host",
+            "cam.local",
+            "request",
+            "--path",
+            "/status.json",
+        ]
+        with patch("sys.argv", argv), redirect_stdout(out):
+            exit_code = main()
+        self.assertEqual(exit_code, 0)
+        self.assertIn('"name": "caf\\u00e9"', out.getvalue())
+
     def test_main_rejects_partial_credentials(self):
         stderr = io.StringIO()
         argv = ["cctv.py", "--host", "cam.local", "--username", "admin", "snapshot-url"]

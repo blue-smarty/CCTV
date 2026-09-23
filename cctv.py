@@ -164,7 +164,8 @@ def main() -> int:
             content_type = (content_type or "").lower()
             if "json" in content_type:
                 try:
-                    print(json.dumps(json.loads(content.decode("utf-8")), indent=2))
+                    encoding = detect_charset(content_type)
+                    print(json.dumps(json.loads(content.decode(encoding)), indent=2))
                     return 0
                 except (UnicodeDecodeError, json.JSONDecodeError):
                     pass
