@@ -5,10 +5,20 @@ from contextlib import redirect_stderr
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
-from cctv import SwannClient, SwannConfig, build_basic_auth_header, main, parse_port
+from cctv import SwannClient, SwannConfig, build_basic_auth_header, main, parse_port, parse_timeout
 
 
 class SwannClientTests(unittest.TestCase):
+    class _FakeStdout:
+        def __init__(self):
+            self.buffer = io.BytesIO()
+
+        def write(self, _text):
+            return 0
+
+        def flush(self):
+            return None
+
     def test_base_url_with_http_and_https(self):
         self.assertEqual(SwannConfig(host="cam.local").base_url, "http://cam.local")
         self.assertEqual(SwannConfig(host="cam.local", https=True, port=8443).base_url, "https://cam.local:8443")
@@ -60,6 +70,11 @@ class SwannClientTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "between 1 and 65535"):
             parse_port("65536")
 
+    def test_parse_timeout_validates_positive(self):
+        self.assertEqual(parse_timeout("10"), 10)
+        with self.assertRaisesRegex(Exception, "positive integer"):
+            parse_timeout("0")
+
     @patch("cctv.request.urlopen")
     def test_main_http_error_to_stderr(self, mock_urlopen):
         mock_urlopen.side_effect = HTTPError(
@@ -99,6 +114,24 @@ class SwannClientTests(unittest.TestCase):
             exit_code = main()
         self.assertEqual(exit_code, 3)
         self.assertIn("Connection error: timed out", stderr.getvalue())
+
+    @patch("cctv.request.urlopen")
+    def test_main_request_writes_binary_to_stdout_buffer(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = b"\xff\xd8"
+        fake_stdout = self._FakeStdout()
+        argv = [
+            "cctv.py",
+            "--host",
+            "cam.local",
+            "request",
+            "--path",
+            "/snapshot.bin",
+        ]
+        with patch("sys.argv", argv), patch("sys.stdout", fake_stdout):
+            exit_code = main()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(fake_stdout.buffer.getvalue(), b"\xff\xd8\n")
 
 
 if __name__ == "__main__":

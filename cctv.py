@@ -27,6 +27,13 @@ def parse_port(value: str) -> int:
     return port
 
 
+def parse_timeout(value: str) -> int:
+    timeout = int(value)
+    if timeout <= 0:
+        raise argparse.ArgumentTypeError("timeout must be a positive integer")
+    return timeout
+
+
 @dataclass(frozen=True)
 class SwannConfig:
     host: str
@@ -82,7 +89,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--password", default=None, help="Password for basic auth")
     parser.add_argument("--port", type=parse_port, default=None, help="Camera/NVR port")
     parser.add_argument("--https", action="store_true", help="Use HTTPS instead of HTTP")
-    parser.add_argument("--timeout", type=int, default=10, help="HTTP timeout in seconds")
+    parser.add_argument("--timeout", type=parse_timeout, default=10, help="HTTP timeout in seconds")
 
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -126,7 +133,9 @@ def main() -> int:
             try:
                 print(json.dumps(json.loads(content.decode("utf-8")), indent=2))
             except (UnicodeDecodeError, json.JSONDecodeError):
-                print(content.decode("utf-8", "replace"))
+                sys.stdout.buffer.write(content)
+                if not content.endswith(b"\n"):
+                    sys.stdout.buffer.write(b"\n")
             return 0
     except error.HTTPError as exc:
         print(f"HTTP error {exc.code}: {exc.reason}", file=sys.stderr)
