@@ -12,3 +12,13 @@ python cctv.py --host 192.168.1.20 --username admin --password "$CCTV_PASSWORD" 
 ```
 
 Use `--https` and `--port` if your Swann device is configured for HTTPS or a custom port.
+
+## Secure GUI
+
+Run the secure GUI client:
+
+```bash
+python cctv_gui.py
+```
+
+The GUI masks password entry and enables HTTPS by default.
