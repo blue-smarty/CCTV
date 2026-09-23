@@ -36,9 +36,11 @@ class SwannClientTests(unittest.TestCase):
         header = build_basic_auth_header("admin", "secret")
         expected = base64.b64encode(b"admin:secret").decode("ascii")
         self.assertEqual(header, f"Basic {expected}")
-        self.assertIsNone(build_basic_auth_header(None, "secret"))
+        self.assertIsNone(build_basic_auth_header(None, None))
         empty_expected = base64.b64encode(b":").decode("ascii")
         self.assertEqual(build_basic_auth_header("", ""), f"Basic {empty_expected}")
+        password_only_expected = base64.b64encode(b":secret").decode("ascii")
+        self.assertEqual(build_basic_auth_header(None, "secret"), f"Basic {password_only_expected}")
 
     def test_snapshot_url(self):
         client = SwannClient(SwannConfig(host="10.0.0.10"))
@@ -54,6 +56,10 @@ class SwannClientTests(unittest.TestCase):
             client.snapshot_url(channel=2, path="/cgi-bin/snapshot.cgi?size=large"),
             "http://10.0.0.10/cgi-bin/snapshot.cgi?size=large&channel=2",
         )
+        self.assertEqual(
+            client.snapshot_url(channel=2, path="https://alt.local/cgi-bin/snapshot.cgi"),
+            "https://alt.local/cgi-bin/snapshot.cgi?channel=2",
+        )
 
     @patch("cctv.request.urlopen")
     def test_request_adds_auth_header(self, mock_urlopen):
@@ -68,6 +74,15 @@ class SwannClientTests(unittest.TestCase):
         self.assertEqual(req.full_url, "http://cam.local/api/status")
         self.assertEqual(req.get_method(), "GET")
         self.assertTrue(req.headers["Authorization"].startswith("Basic "))
+
+    @patch("cctv.request.urlopen")
+    def test_request_accepts_absolute_url(self, mock_urlopen):
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = b"ok"
+        client = SwannClient(SwannConfig("cam.local"))
+        client.request(path="https://alt.local/api/status")
+        req = mock_urlopen.call_args.args[0]
+        self.assertEqual(req.full_url, "https://alt.local/api/status")
 
     @patch("cctv.request.urlopen")
     def test_request_normalizes_path_without_leading_slash(self, mock_urlopen):
@@ -166,7 +181,7 @@ class SwannClientTests(unittest.TestCase):
         with patch("sys.argv", argv), patch("sys.stdout", fake_stdout):
             exit_code = main()
         self.assertEqual(exit_code, 0)
-        self.assertEqual(fake_stdout.buffer.getvalue(), b"\xff\xd8\n")
+        self.assertEqual(fake_stdout.buffer.getvalue(), b"\xff\xd8")
 
     @patch("cctv.request.urlopen")
     def test_main_request_writes_text_for_text_content_type(self, mock_urlopen):
@@ -225,13 +240,12 @@ class SwannClientTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn('"name": "caf\\u00e9"', out.getvalue())
 
-    def test_main_rejects_partial_credentials(self):
-        stderr = io.StringIO()
-        argv = ["cctv.py", "--host", "cam.local", "--username", "admin", "snapshot-url"]
-        with patch("sys.argv", argv), redirect_stderr(stderr):
+    def test_main_allows_password_without_username(self):
+        out = io.StringIO()
+        argv = ["cctv.py", "--host", "cam.local", "--password", "secret", "snapshot-url"]
+        with patch("sys.argv", argv), redirect_stdout(out):
             exit_code = main()
-        self.assertEqual(exit_code, 4)
-        self.assertIn("Both --username and --password must be provided together", stderr.getvalue())
+        self.assertEqual(exit_code, 0)
 
     def test_main_allows_empty_credential_values_when_both_present(self):
         out = io.StringIO()

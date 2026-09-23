@@ -18,6 +18,9 @@ DEFAULT_STATUS_PATH = "/ISAPI/System/status"
 
 
 def normalize_path(path: str) -> str:
+    parsed = parse.urlsplit(path)
+    if parsed.scheme and parsed.netloc:
+        return path
     return path if path.startswith("/") else f"/{path}"
 
 
@@ -84,9 +87,9 @@ class SwannConfig:
 
 
 def build_basic_auth_header(username: Optional[str], password: Optional[str]) -> Optional[str]:
-    if username is None:
+    if username is None and password is None:
         return None
-    token = base64.b64encode(f"{username}:{password or ''}".encode("utf-8")).decode("ascii")
+    token = base64.b64encode(f"{username or ''}:{password or ''}".encode("utf-8")).decode("ascii")
     return f"Basic {token}"
 
 
@@ -101,11 +104,21 @@ class SwannClient:
         query = parse.urlencode(query_pairs)
         query_suffix = f"?{query}" if query else ""
         fragment = f"#{parsed_path.fragment}" if parsed_path.fragment else ""
-        return f"{self.config.base_url}{parsed_path.path}{query_suffix}{fragment}"
+        if parsed_path.scheme and parsed_path.netloc:
+            base = f"{parsed_path.scheme}://{parsed_path.netloc}"
+        else:
+            base = self.config.base_url
+        return f"{base}{parsed_path.path}{query_suffix}{fragment}"
 
     def request_response(self, path: str, method: str = "GET", accept: str = "application/json") -> tuple[bytes, Optional[str]]:
+        normalized_path = normalize_path(path)
+        parsed_path = parse.urlsplit(normalized_path)
+        if parsed_path.scheme and parsed_path.netloc:
+            url = normalized_path
+        else:
+            url = f"{self.config.base_url}{normalized_path}"
         req = request.Request(
-            url=f"{self.config.base_url}{normalize_path(path)}",
+            url=url,
             method=method,
             headers={"Accept": accept},
         )
@@ -159,9 +172,6 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
-    if (args.username is None) != (args.password is None):
-        print("Both --username and --password must be provided together", file=sys.stderr)
-        return 4
     client = SwannClient(
         SwannConfig(
             args.host,
@@ -185,8 +195,6 @@ def main() -> int:
             is_binary, rendered = render_content(content, content_type)
             if is_binary:
                 sys.stdout.buffer.write(content)
-                if not content.endswith(b"\n"):
-                    sys.stdout.buffer.write(b"\n")
             else:
                 print(rendered)
             return 0
